@@ -1,64 +1,99 @@
 import csv
+import time
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from urllib.parse import quote
-import time
 from flask import Flask, request, send_from_directory
 
 app = Flask(__name__)
+image_path = r"D:\whatsapp\imaged2.jpg"  # Use raw string or forward slashes
 
 # Function to read contacts from CSV
 def read_contacts():
     contacts = []
-    with open('contacts.csv', 'r') as file:
-        csv_reader = csv.reader(file)
-        next(csv_reader)  # Skip the header row
-        for row in csv_reader:
-            if row and len(row) >= 2:  # Ensure the row is not empty and has two columns
-                name = row[0]
-                phone_number = row[1]
-                contacts.append((name, phone_number))
-            else:
-                print(f"Skipping invalid or empty row: {row}")
+    try:
+        with open('contacts.csv', 'r') as file:
+            csv_reader = csv.reader(file)
+            next(csv_reader)  # Skip the header row
+            for row in csv_reader:
+                if row and len(row) >= 2:  # Ensure the row is not empty and has two columns
+                    name = row[0]
+                    phone_number = row[1]
+                    contacts.append((name, phone_number))
+                else:
+                    print(f"Skipping invalid or empty row: {row}")
+    except FileNotFoundError:
+        print("Error: 'contacts.csv' file not found.")
     return contacts
 
 # Function to send WhatsApp messages
 def send_whatsapp_messages():
     contacts = read_contacts()
-    
+
     # Set up the WebDriver
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-    
+
     # Open WhatsApp Web
     driver.get('https://web.whatsapp.com')
-    
+
     # Delay to scan QR code
     print("Please scan the QR code in WhatsApp Web to log in.")
-    time.sleep(15)
-    
+    time.sleep(30)  # Increased to give enough time to scan QR
+
     # Loop through the contacts and send the personalized message
     for name, phone_number in contacts:
         personalized_msg = f"Hi, {name}"
         personalized_msg = quote(personalized_msg)
-        
+
         # Construct the WhatsApp URL
         link = f'https://web.whatsapp.com/send?phone=91{phone_number}&text={personalized_msg}'
-        
+
         # Open the URL
         driver.get(link)
         time.sleep(10)
-        
+
         # Send the message by pressing Enter
         action = ActionChains(driver)
         action.send_keys(Keys.ENTER)
         action.perform()
-        time.sleep(10)
-    
-    # Keep the browser open for a while
+        time.sleep(5)
+
+        # Wait for the attachment button to be clickable and click it
+        try:
+            attach_button = WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.XPATH, '//div[@title="Attach"]'))
+            )
+            attach_button.click()
+        except Exception as e:
+            print(f"Error while trying to click attach button: {e}")
+            continue
+
+        # Wait for the file input element and upload the image
+        try:
+            file_input = WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((By.XPATH, '//input[@accept="image/*,video/mp4,video/3gpp,video/quicktime"]'))
+            )
+            file_input.send_keys(image_path)
+        except Exception as e:
+            print(f"Error while trying to upload image: {e}")
+            continue
+
+        # Wait for the image to upload and then send the message
+        time.sleep(5)
+        action = ActionChains(driver)
+        action.send_keys(Keys.ENTER)
+        action.perform()
+        time.sleep(5)
+
+    # Keep the browser open for a while after sending all messages
     time.sleep(2000)
+    driver.quit()
 
 # Route for the homepage to display index.html
 @app.route('/')
