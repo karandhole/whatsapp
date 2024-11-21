@@ -1,7 +1,7 @@
 import csv
 import time
 import os
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, redirect, url_for, flash
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -14,6 +14,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key'  # For flash messages
+
 UPLOAD_FOLDER = 'static/uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -27,7 +29,7 @@ def read_contacts(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             csv_reader = csv.reader(file)
-            next(csv_reader)
+            next(csv_reader)  # Skip header
             for row in csv_reader:
                 if len(row) >= 3:
                     name, phone, village = row[0], row[1], row[2]
@@ -37,24 +39,26 @@ def read_contacts(file_path):
     return contacts
 
 def send_whatsapp_messages(contacts, message_template, image_path):
+    # Initialize WebDriver
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
     driver.get('https://web.whatsapp.com')
     print("Please scan the QR code in WhatsApp Web.")
     time.sleep(60)  # Increased time to ensure QR code scan
 
+    # Iterate through the contacts and send messages
     for name, phone, village in contacts:
         message = message_template.replace("{name}", name).replace("{village}", village)
         encoded_message = quote(message)
         whatsapp_url = f"https://web.whatsapp.com/send?phone=91{phone}&text={encoded_message}"
 
         driver.get(whatsapp_url)
-        time.sleep(15)  # Increased time for message box to load
+        time.sleep(15)  # Wait for message box to load
 
+        # Send the message
         action = ActionChains(driver)
         action.send_keys(Keys.ENTER).perform()
-        time.sleep(15)  # Increased time to ensure the message is sent
+        time.sleep(15)  # Ensure message is sent
 
-         # Attach and send image if an image path is provided
         if image_path:
             try:
                 # Wait for the attach button to be clickable and click it
@@ -71,23 +75,21 @@ def send_whatsapp_messages(contacts, message_template, image_path):
 
                 # Send the image file path to the input field
                 file_input.send_keys(image_path)
-                time.sleep(10)  # Increased time for the image to load
+                time.sleep(10)  # Wait for the image to load
 
                 # Click the "Send" button for the image
                 send_button = WebDriverWait(driver, 30).until(
                     EC.element_to_be_clickable((By.XPATH, '//div[contains(@aria-label, "Send")]'))
                 )
                 send_button.click()
-                time.sleep(10)  # Increased time to ensure the image is sent
+                time.sleep(10)  # Ensure image is sent
 
                 print(f"Image sent successfully to {name} ({phone})!")
-
             except Exception as e:
                 print(f"Error while sending image to {name} ({phone}): {e}")
 
-
-
-            driver.quit()
+    # Close the driver after sending messages
+    driver.quit()
 
 @app.route('/')
 def home():
@@ -99,22 +101,28 @@ def send_messages():
     image_file = request.files.get('image_file')
     message_template = request.form['message_template']
 
+    # Check if CSV file is valid
     if csv_file and allowed_file(csv_file.filename):
         csv_filename = secure_filename(csv_file.filename)
         csv_path = os.path.join(app.config['UPLOAD_FOLDER'], csv_filename)
         csv_file.save(csv_path)
 
         image_path = ""
+        # Check if image file is valid
         if image_file and allowed_file(image_file.filename):
             image_filename = secure_filename(image_file.filename)
             image_path = os.path.join(app.config['UPLOAD_FOLDER'], image_filename)
             image_file.save(image_path)
 
+        # Read contacts from CSV and send messages
         contacts = read_contacts(csv_path)
         send_whatsapp_messages(contacts, message_template, image_path)
-        return "Messages sent successfully!"
+
+        flash('Messages sent successfully!', 'success')
+        return redirect(url_for('home'))
     else:
-        return "Invalid file. Please upload a valid CSV file.", 400
+        flash('Invalid file. Please upload a valid CSV file.', 'error')
+        return redirect(url_for('home'))
 
 if __name__ == '__main__':
     app.run(debug=True)
