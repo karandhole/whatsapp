@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Message Sender</title>
+</head>
+<body>
+    <h1>WhatsApp Bulk Message Sender</h1>
+    <form action="/send-messages" method="POST" enctype="multipart/form-data">
+        <label for="csv_file">Upload CSV File:</label>
+        <input type="file" name="csv_file" required><br><br>
+
+        <label for="image_file">Upload Image (Optional):</label>
+        <input type="file" name="image_file"><br><br>
+
+        <label for="message_template">Message Template:</label><br>
+        <textarea name="message_template" rows="5" cols="50" placeholder="Enter your message here. Use {name} and {village} for dynamic content."></textarea><br><br>
+
+        <button type="submit">Send Messages</button>
+    </form>
+</body>
+</html>
